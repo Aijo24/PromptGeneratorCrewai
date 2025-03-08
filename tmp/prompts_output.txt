@@ -1,0 +1,140 @@
+### Detailed AI Prompts for Project Tasks
+
+---
+
+#### Task 1: Requirements Gathering
+
+**Context:** The first phase of the project involves defining the objectives and collecting user requirements from stakeholders to ensure that the AI software solution meets their needs.
+
+**Prompt:**
+"Please conduct a requirements gathering session with project stakeholders. The aim is to define the project scope and identify user needs for the AI application. Provide a list of essential features that align with client expectations. 
+
+**Instructions:**
+- Organize and conduct a structured interview or survey.
+- Include both functional and non-functional requirements.
+- Ensure clarity in each requirement to avoid ambiguity.
+
+**Constraints/Requirements:**
+- Deliver the requirements in a structured format (e.g., user stories, acceptance criteria).
+- Limit the response to a maximum of 1500 words.
+- Prioritize requirements based on feasibility and impact on user experience.
+
+**Evaluation Criteria:**
+- Completeness: All relevant requirements are documented.
+- Clarity: Requirements are clearly articulated and unambiguous.
+- Relevance: Requirements align with the project’s objectives.
+
+**Example Output:**
+- User Story: “As a user, I want to receive personalized recommendations based on my preferences so that I can find relevant content easily.”
+
+---
+
+#### Task 2: Design Development 
+
+**Context:** In this phase, the UI/UX team is responsible for creating intuitive designs that account for user needs and facilitate a pleasant user experience.
+
+**Prompt:**
+"Develop the UI/UX designs for the AI application. Your designs should reflect the user requirements identified in the previous phase and ensure usability and aesthetic appeal.
+
+**Instructions:**
+- Create wireframes and mockups for all key screens.
+- Include design specifications such as colors, typography, and interactive elements.
+- Ensure designs are mobile-responsive.
+
+**Constraints/Requirements:**
+- Designs must adhere to accessibility standards (e.g., WCAG).
+- Provide a rationale for each design decision.
+- The submission should not exceed 30 pages, including appendices.
+
+**Evaluation Criteria:**
+- Usability: Design should facilitate easy navigation.
+- Visual appeal: Aesthetic quality of the designs.
+- Responsiveness: Designs must work well on different devices.
+
+**Example Output:**
+- Wireframe of the homepage showcasing a simple, intuitive layout with clearly marked sections for user engagement.
+
+---
+
+#### Task 3: AI Module Development 
+
+**Context:** The AI Engineers will develop the backend AI functionalities that will power the application's features based on the requirements gathered.
+
+**Prompt:**
+"Implement the AI module for the application. The module should address the requirements specified earlier and perform efficiently.
+
+**Instructions:**
+- Develop algorithms based on defined user scenarios.
+- Ensure code is scalable and maintainable, with appropriate documentation.
+- Integrate with projected data sources for model training.
+
+**Constraints/Requirements:**
+- Use Python and any preferred AI frameworks (e.g., TensorFlow, PyTorch).
+- Adhere to coding standards and best practices.
+- Performance benchmarks must be included to validate the model.
+
+**Evaluation Criteria:**
+- Functionality: Code meets the specified requirements.
+- Performance: AI model should perform within acceptable latency ranges.
+- Documentation: Code is well-commented and includes usage guidelines.
+
+**Example Output:**
+- A Python script implementing a recommendation algorithm with accompanying documentation explaining its functionality.
+
+---
+
+#### Task 4: Testing 
+
+**Context:** The QA Team is responsible for testing the application to ensure reliability, functionality, and a seamless user experience before deployment.
+
+**Prompt:**
+"Conduct comprehensive testing of the AI application after the development phase. Your testing should cover unit testing, integration testing, and user acceptance testing.
+
+**Instructions:**
+- Develop a test plan specifying test cases and scenarios.
+- Document test results and any identified bugs or issues.
+- Perform regression testing to ensure that new features do not disrupt existing functionalities.
+
+**Constraints/Requirements:**
+- Use testing tools such as Selenium for automated tests.
+- All tests must be reproducible.
+- Maintain a bug tracking system for effective resolution management.
+
+**Evaluation Criteria:**
+- Coverage: All critical functionalities are tested.
+- Detail: Test documentation is thorough and organized.
+- Usability feedback: User acceptance test results provide insight into user experience.
+
+**Example Output:**
+- A detailed test report summarizing test cases, outcomes, and a list of bugs categorized by severity.
+
+---
+
+#### Task 5: Deployment 
+
+**Context:** The DevOps Engineer will prepare the application for launch, ensuring that the environment is ready and that clients can easily access the new software.
+
+**Prompt:**
+"Prepare for the deployment of the AI application after testing is complete. Your task is to ensure the application launches smoothly and that support mechanisms are in place.
+
+**Instructions:**
+- Create a deployment checklist that includes necessary configurations and pre-launch tests.
+- Plan for post-deployment support and troubleshooting.
+- Update any relevant documentation for users.
+
+**Constraints/Requirements:**
+- Coordinate with all teams to confirm readiness.
+- Ensure that backup plans are in place in case of deployment failures.
+- Deployment should be fully scripted to enable repeatability.
+
+**Evaluation Criteria:**
+- Completeness: All aspects of deployment are documented and reviewed.
+- Success rate: Ensure successful launch with minimal issues.
+- Preparedness: Post-launch support is clearly defined and established.
+
+**Example Output:**
+- A deployment plan that outlines steps to be taken, roles responsible, and a rollback strategy in case of failure.
+
+---
+
+These detailed AI prompts provide a comprehensive framework for guiding AI systems through each major task of the project plan effectively. They ensure clarity and thoroughness in outputs, aligning with project objectives.
