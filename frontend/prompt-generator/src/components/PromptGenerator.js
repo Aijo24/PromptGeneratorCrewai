@@ -10,7 +10,6 @@ import {
   Alert,
   Tabs,
   Tab,
-  Divider,
   FormControlLabel,
   Checkbox,
   Link,
@@ -41,6 +40,7 @@ const PromptGenerator = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [createGithubIssues, setCreateGithubIssues] = useState(false);
   const [githubToken, setGithubToken] = useState('');
+  const [githubRepo, setGithubRepo] = useState('');
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -125,10 +125,18 @@ const PromptGenerator = () => {
       return;
     }
     
-    if (createGithubIssues && !githubToken) {
-      setError('Please enter your GitHub token to create issues');
-      setLoading(false);
-      return;
+    if (createGithubIssues) {
+      if (!githubToken) {
+        setError('Please enter your GitHub token to create issues');
+        setLoading(false);
+        return;
+      }
+      
+      if (!githubRepo) {
+        setError('Please enter your GitHub repository in the format "username/repo"');
+        setLoading(false);
+        return;
+      }
     }
     
     // Create form data
@@ -137,8 +145,9 @@ const PromptGenerator = () => {
     formData.append('project_requirements', projectRequirements);
     formData.append('create_issues', createGithubIssues.toString());
     
-    if (createGithubIssues && githubToken) {
+    if (createGithubIssues) {
       formData.append('github_token', githubToken);
+      formData.append('github_repo', githubRepo);
     }
     
     try {
@@ -318,16 +327,27 @@ const PromptGenerator = () => {
             />
             
             {createGithubIssues && (
-              <TextField
-                label="GitHub Token"
-                type="password"
-                fullWidth
-                margin="normal"
-                value={githubToken}
-                onChange={(e) => setGithubToken(e.target.value)}
-                helperText="Your GitHub personal access token with repo scope"
-                size="small"
-              />
+              <>
+                <TextField
+                  label="GitHub Repository"
+                  fullWidth
+                  margin="normal"
+                  value={githubRepo}
+                  onChange={(e) => setGithubRepo(e.target.value)}
+                  helperText="Enter in the format 'username/repository'"
+                  size="small"
+                />
+                <TextField
+                  label="GitHub Token"
+                  type="password"
+                  fullWidth
+                  margin="normal"
+                  value={githubToken}
+                  onChange={(e) => setGithubToken(e.target.value)}
+                  helperText="Your GitHub personal access token with repo scope"
+                  size="small"
+                />
+              </>
             )}
           </Box>
           

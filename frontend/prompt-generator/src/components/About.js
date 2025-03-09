@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Typography, Paper, List, ListItem, ListItemIcon, ListItemText, Divider } from '@mui/material';
+import { Box, Typography, Paper, List, ListItem, ListItemIcon, ListItemText } from '@mui/material';
 import CodeIcon from '@mui/icons-material/Code';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ScheduleIcon from '@mui/icons-material/Schedule';
@@ -107,7 +107,26 @@ const About = () => {
             </ListItemIcon>
             <ListItemText 
               primary="Create a Personal Access Token (PAT)" 
-              secondary="Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token. Ensure it has 'repo' scope." 
+              secondary={
+                <>
+                  Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token. 
+                  Make sure to select the "repo" scope to allow issue creation. Without this scope, you'll get permission errors.
+                </>
+              }
+            />
+          </ListItem>
+          <ListItem>
+            <ListItemIcon>
+              <GitHubIcon color="primary" />
+            </ListItemIcon>
+            <ListItemText 
+              primary="Specify your repository" 
+              secondary={
+                <>
+                  Enter your repository in the format "username/repository". For example: "your-username/project-name". 
+                  You must have access to create issues in this repository, and it must exist.
+                </>
+              }
             />
           </ListItem>
           <ListItem>
@@ -125,7 +144,7 @@ const About = () => {
             </ListItemIcon>
             <ListItemText 
               primary="Check the 'Create GitHub Issues' option" 
-              secondary="Enable this option in the prompt generator form and enter your token to automatically create issues." 
+              secondary="Enable this option in the prompt generator form, enter your repository name and token to automatically create issues." 
             />
           </ListItem>
         </List>

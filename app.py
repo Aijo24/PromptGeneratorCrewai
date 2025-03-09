@@ -17,7 +17,6 @@ logging.basicConfig(level=logging.INFO)
 # Try to get API key from environment variable, or set it to an empty string
 api_key = os.environ.get("OPENAI_API_KEY", "")
 github_token = os.environ.get("GITHUB_TOKEN", "")
-github_repo = os.environ.get("GITHUB_REPO", "Aijo24/PromptGeneratorCrewai")
 os.environ["OPENAI_MODEL"] = "gpt-4o-mini"
 
 # Helper function to extract content from CrewOutput objects
@@ -132,16 +131,17 @@ def create_ai_prompts(project_plan):
     ai_prompts = prompt_crew.kickoff()
     return ai_prompts
 
-def create_github_issues(project_plan, ai_prompts):
+def create_github_issues(project_plan, ai_prompts, repo_name):
     """
     Create GitHub issues for each task in the project plan, with prompts for each agent.
     
     Args:
         project_plan (str): The project plan with tasks
         ai_prompts (str): The AI prompts for each task
+        repo_name (str): The GitHub repository name in format "username/repo"
         
     Returns:
-        list: A list of created issue URLs
+        dict: A dictionary with the result status and created issues
     """
     if not github_token:
         app.logger.warning("GitHub token not provided. Issues will not be created.")
@@ -150,13 +150,48 @@ def create_github_issues(project_plan, ai_prompts):
             "message": "GitHub token not provided. Set the GITHUB_TOKEN environment variable."
         }
     
+    if not repo_name:
+        app.logger.warning("GitHub repository not provided. Issues will not be created.")
+        return {
+            "success": False,
+            "message": "GitHub repository not specified. Please provide a repository in the format 'username/repo'."
+        }
+    
     try:
         # Initialize GitHub client
         g = Github(github_token)
-        repo = g.get_repo(github_repo)
+        
+        try:
+            # Try to get the repository
+            repo = g.get_repo(repo_name)
+            
+            # Try to verify access by getting repository info
+            _ = repo.full_name
+        except GithubException as ge:
+            if ge.status == 404:
+                return {
+                    "success": False,
+                    "message": f"Repository '{repo_name}' not found. Please check the repository name."
+                }
+            elif ge.status == 403:
+                return {
+                    "success": False,
+                    "message": "Your GitHub token doesn't have access to this repository. Make sure you have 'repo' scope enabled on your token and access to the repository."
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": f"GitHub API error: {str(ge)}. Status code: {ge.status}"
+                }
         
         # Extract tasks from project plan
         tasks = extract_tasks_from_plan(project_plan)
+        
+        if not tasks:
+            return {
+                "success": False,
+                "message": "No tasks could be extracted from the project plan. Unable to create issues."
+            }
         
         # Match prompts to tasks
         prompts_by_task = match_prompts_to_tasks(ai_prompts, tasks)
@@ -185,32 +220,51 @@ def create_github_issues(project_plan, ai_prompts):
 ```
             """
             
-            # Create the issue
-            issue = repo.create_issue(
-                title=task_title,
-                body=issue_body,
-                labels=["ai-generated", task_assignee]
-            )
+            try:
+                # Create the issue
+                issue = repo.create_issue(
+                    title=task_title,
+                    body=issue_body,
+                    labels=["ai-generated", task_assignee]
+                )
+                
+                created_issues.append({
+                    "title": task_title,
+                    "url": issue.html_url,
+                    "assignee": task_assignee,
+                    "number": issue.number
+                })
+            except GithubException as ie:
+                app.logger.error(f"Error creating issue '{task_title}': {str(ie)}")
+                # Continue with other issues even if one fails
+                continue
             
-            created_issues.append({
-                "title": task_title,
-                "url": issue.html_url,
-                "assignee": task_assignee,
-                "number": issue.number
-            })
+        if not created_issues:
+            return {
+                "success": False,
+                "message": "Failed to create any issues. Please check your GitHub token permissions."
+            }
             
         return {
             "success": True,
             "issues": created_issues,
-            "message": f"Created {len(created_issues)} issues successfully."
+            "message": f"Created {len(created_issues)} issues successfully in {repo_name}."
         }
         
     except GithubException as e:
         app.logger.error(f"GitHub API error: {str(e)}")
-        return {
-            "success": False,
-            "message": f"GitHub API error: {str(e)}"
-        }
+        error_message = str(e)
+        
+        if "Bad credentials" in error_message:
+            return {
+                "success": False,
+                "message": "Invalid GitHub token. Please check your Personal Access Token."
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"GitHub API error: {str(e)}"
+            }
     except Exception as e:
         app.logger.error(f"Error creating GitHub issues: {str(e)}")
         return {
@@ -372,6 +426,7 @@ def generate_prompts():
     project_requirements = request.form.get('project_requirements', '')
     create_issues = request.form.get('create_issues', 'false').lower() == 'true'
     github_token_input = request.form.get('github_token', '')
+    github_repo_input = request.form.get('github_repo', '')
     
     # Check if we have the required information
     if not api_key or not project_requirements:
@@ -403,8 +458,13 @@ def generate_prompts():
         
         # Create GitHub issues if requested
         github_issues_result = None
-        if create_issues and github_token:
-            github_issues_result = create_github_issues(project_plan, ai_prompts)
+        if create_issues and github_token and github_repo_input:
+            github_issues_result = create_github_issues(project_plan, ai_prompts, github_repo_input)
+        elif create_issues and (not github_token or not github_repo_input):
+            github_issues_result = {
+                "success": False,
+                "message": "GitHub token and repository are required to create issues."
+            }
         
         # Return the results as strings (which are JSON serializable)
         response = {
