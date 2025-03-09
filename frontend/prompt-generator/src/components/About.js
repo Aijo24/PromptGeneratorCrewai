@@ -6,6 +6,7 @@ import ScheduleIcon from '@mui/icons-material/Schedule';
 import SecurityIcon from '@mui/icons-material/Security';
 import PeopleIcon from '@mui/icons-material/People';
 import GitHubIcon from '@mui/icons-material/GitHub';
+import ErrorIcon from '@mui/icons-material/Error';
 
 const About = () => {
   return (
@@ -106,11 +107,14 @@ const About = () => {
               <GitHubIcon color="primary" />
             </ListItemIcon>
             <ListItemText 
-              primary="Create a Personal Access Token (PAT)" 
+              primary="Create a Classic Personal Access Token (PAT)" 
               secondary={
                 <>
-                  Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token. 
-                  Make sure to select the "repo" scope to allow issue creation. Without this scope, you'll get permission errors.
+                  <strong>Important:</strong> You must use a classic token, not a fine-grained token. Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token. 
+                  <Box component="div" sx={{ mt: 1, p: 1, bgcolor: '#f8f9fa', borderRadius: 1 }}>
+                    Make sure to select the full "repo" scope checkbox (not just individual repo permissions).
+                    Fine-grained tokens will not work for issue creation even if they appear to have issue permissions.
+                  </Box>
                 </>
               }
             />
@@ -125,6 +129,9 @@ const About = () => {
                 <>
                   After entering your GitHub token, we'll automatically fetch and display all repositories you have access to.
                   Simply select the repository where you want to create issues from the dropdown menu.
+                  <Box component="div" sx={{ mt: 1, p: 1, bgcolor: '#f8f9fa', borderRadius: 1 }}>
+                    Note: Make sure issues are enabled for your repository (Settings → Features → Issues).
+                  </Box>
                 </>
               }
             />
@@ -138,13 +145,46 @@ const About = () => {
               secondary="Your token is like a password. We don't store it, but transmit it securely only when creating issues." 
             />
           </ListItem>
+        </List>
+        
+        <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
+          Troubleshooting Permission Issues
+        </Typography>
+        <List>
           <ListItem>
             <ListItemIcon>
-              <AutoAwesomeIcon color="primary" />
+              <ErrorIcon color="error" />
             </ListItemIcon>
             <ListItemText 
-              primary="Check the 'Create GitHub Issues' option" 
-              secondary="Enable this option in the prompt generator form, enter your token, select a repository, and we'll automatically create issues for each task." 
+              primary="'Resource not accessible by personal access token'" 
+              secondary={
+                <>
+                  This error happens when your token doesn't have sufficient permissions. The most common causes are:
+                  <Box component="ul" sx={{ mt: 1 }}>
+                    <li>Using a fine-grained token instead of a classic token</li>
+                    <li>Not selecting the full "repo" scope when creating your token</li>
+                    <li>Issues being disabled in the repository settings</li>
+                  </Box>
+                </>
+              }
+            />
+          </ListItem>
+          <ListItem>
+            <ListItemIcon>
+              <GitHubIcon color="primary" />
+            </ListItemIcon>
+            <ListItemText 
+              primary="Creating a proper classic token"
+              secondary={
+                <>
+                  1. Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
+                  2. Click "Generate new token (classic)"
+                  3. Give it a descriptive name
+                  4. Select the full "repo" checkbox (not individual sub-permissions)
+                  5. Click "Generate token"
+                  6. Copy the token immediately (it won't be shown again)
+                </>
+              }
             />
           </ListItem>
         </List>

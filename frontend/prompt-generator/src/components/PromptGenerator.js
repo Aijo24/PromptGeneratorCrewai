@@ -139,6 +139,11 @@ const PromptGenerator = () => {
         } else {
           setRepoError('No repositories found with issue creation permissions.');
         }
+        
+        // Handle warnings
+        if (response.data.warnings && response.data.warnings.length > 0) {
+          setRepoError(response.data.warnings.join(' '));
+        }
       } else {
         setRepoError(response.data.message || 'Failed to fetch repositories.');
       }
@@ -281,6 +286,118 @@ const PromptGenerator = () => {
           <Alert severity="error" sx={{ mb: 2 }}>
             {githubIssues.message}
           </Alert>
+          
+          {githubIssues.issues_created && githubIssues.issues_created.length > 0 && (
+            <>
+              <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+                Issues Created Before Error:
+              </Typography>
+              <List>
+                {githubIssues.issues_created.map((issue, index) => (
+                  <ListItem key={`created-${index}`} divider={index < githubIssues.issues_created.length - 1}>
+                    <ListItemIcon>
+                      <TaskAltIcon color="primary" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={
+                        <Link href={issue.url} target="_blank" rel="noopener noreferrer">
+                          #{issue.number}: {issue.title}
+                        </Link>
+                      }
+                      secondary={`Assignee: ${issue.assignee}`}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </>
+          )}
+          
+          {githubIssues.issues_failed && githubIssues.issues_failed.length > 0 && (
+            <>
+              <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+                Issues That Failed:
+              </Typography>
+              <List>
+                {githubIssues.issues_failed.map((issue, index) => (
+                  <ListItem key={`failed-${index}`} divider={index < githubIssues.issues_failed.length - 1}>
+                    <ListItemIcon>
+                      <ErrorIcon color="error" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={issue.title}
+                      secondary={issue.error}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </>
+          )}
+          
+          <Typography variant="body1" sx={{ mt: 3 }}>
+            <strong>How to fix this:</strong>
+          </Typography>
+          <List>
+            <ListItem>
+              <ListItemIcon>
+                <GitHubIcon />
+              </ListItemIcon>
+              <ListItemText primary="Use a classic token, not a fine-grained token" secondary="Fine-grained tokens often don't have the necessary permissions for issue creation." />
+            </ListItem>
+            <ListItem>
+              <ListItemIcon>
+                <GitHubIcon />
+              </ListItemIcon>
+              <ListItemText primary="Ensure the 'repo' scope is selected" secondary="When creating your token, make sure to check the full 'repo' scope checkbox." />
+            </ListItem>
+          </List>
+        </Box>
+      );
+    }
+    
+    if (githubIssues.partial) {
+      return (
+        <Box sx={{ mt: 2 }}>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {githubIssues.message}
+          </Alert>
+          
+          <Typography variant="h6" gutterBottom>
+            Successfully Created Issues:
+          </Typography>
+          <List>
+            {githubIssues.issues.map((issue, index) => (
+              <ListItem key={index} divider={index < githubIssues.issues.length - 1}>
+                <ListItemIcon>
+                  <TaskAltIcon color="primary" />
+                </ListItemIcon>
+                <ListItemText
+                  primary={
+                    <Link href={issue.url} target="_blank" rel="noopener noreferrer">
+                      #{issue.number}: {issue.title}
+                    </Link>
+                  }
+                  secondary={`Assignee: ${issue.assignee}`}
+                />
+              </ListItem>
+            ))}
+          </List>
+          
+          <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+            Issues That Failed:
+          </Typography>
+          <List>
+            {githubIssues.issues_failed.map((issue, index) => (
+              <ListItem key={`failed-${index}`} divider={index < githubIssues.issues_failed.length - 1}>
+                <ListItemIcon>
+                  <ErrorIcon color="error" />
+                </ListItemIcon>
+                <ListItemText
+                  primary={issue.title}
+                  secondary={issue.error}
+                />
+              </ListItem>
+            ))}
+          </List>
         </Box>
       );
     }
@@ -322,47 +439,62 @@ const PromptGenerator = () => {
       return null;
     }
     
+    const isFineGrainedToken = repoError && repoError.includes("fine-grained token");
+    
     return (
-      <FormControl fullWidth margin="normal" size="small">
-        <InputLabel id="github-repo-label">GitHub Repository</InputLabel>
-        <Select
-          labelId="github-repo-label"
-          value={githubRepo}
-          onChange={(e) => setGithubRepo(e.target.value)}
-          label="GitHub Repository"
-          disabled={loadingRepos || repositories.length === 0}
-          endAdornment={
-            <InputAdornment position="end">
-              <Tooltip title="Refresh repositories">
-                <IconButton 
-                  edge="end" 
-                  onClick={handleRefreshRepos}
-                  disabled={loadingRepos || !githubToken}
-                >
-                  {loadingRepos ? <CircularProgress size={24} /> : <RefreshIcon />}
-                </IconButton>
-              </Tooltip>
-            </InputAdornment>
-          }
-        >
-          {repositories.map((repo) => (
-            <MenuItem key={repo.full_name} value={repo.full_name}>
-              {repo.full_name}
-              {!repo.has_issues && " (Issues disabled)"}
-            </MenuItem>
-          ))}
-        </Select>
-        {githubUser && (
-          <Typography variant="caption" color="text.secondary">
-            Connected as {githubUser}
-          </Typography>
+      <>
+        {isFineGrainedToken && (
+          <Alert severity="warning" sx={{ mt: 2, mb: 2 }}>
+            <Typography variant="subtitle2">
+              Fine-grained token detected
+            </Typography>
+            <Typography variant="body2">
+              Fine-grained tokens typically don't work for issue creation. Please use a classic token with the 'repo' scope instead.
+            </Typography>
+          </Alert>
         )}
-        {repoError && (
-          <Typography variant="caption" color="error">
-            {repoError}
-          </Typography>
-        )}
-      </FormControl>
+        
+        <FormControl fullWidth margin="normal" size="small">
+          <InputLabel id="github-repo-label">GitHub Repository</InputLabel>
+          <Select
+            labelId="github-repo-label"
+            value={githubRepo}
+            onChange={(e) => setGithubRepo(e.target.value)}
+            label="GitHub Repository"
+            disabled={loadingRepos || repositories.length === 0}
+            endAdornment={
+              <InputAdornment position="end">
+                <Tooltip title="Refresh repositories">
+                  <IconButton 
+                    edge="end" 
+                    onClick={handleRefreshRepos}
+                    disabled={loadingRepos || !githubToken}
+                  >
+                    {loadingRepos ? <CircularProgress size={24} /> : <RefreshIcon />}
+                  </IconButton>
+                </Tooltip>
+              </InputAdornment>
+            }
+          >
+            {repositories.map((repo) => (
+              <MenuItem key={repo.full_name} value={repo.full_name}>
+                {repo.full_name}
+                {!repo.has_issues && " (Issues disabled)"}
+              </MenuItem>
+            ))}
+          </Select>
+          {githubUser && (
+            <Typography variant="caption" color="text.secondary">
+              Connected as {githubUser}
+            </Typography>
+          )}
+          {repoError && (
+            <Typography variant="caption" color="error">
+              {repoError}
+            </Typography>
+          )}
+        </FormControl>
+      </>
     );
   };
 

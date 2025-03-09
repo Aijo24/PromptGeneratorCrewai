@@ -165,8 +165,24 @@ def create_github_issues(project_plan, ai_prompts, repo_name):
             # Try to get the repository
             repo = g.get_repo(repo_name)
             
-            # Try to verify access by getting repository info
-            _ = repo.full_name
+            # Verify access by attempting to get repository issues
+            try:
+                # This will fail if the user doesn't have issues access
+                # Just get one issue to verify access (limit=1)
+                list(repo.get_issues(state='all', limit=1))
+            except GithubException as access_e:
+                if access_e.status == 403:
+                    return {
+                        "success": False,
+                        "message": "Your token doesn't have permission to create issues in this repository. Make sure you're using a classic token with 'repo' scope, not a fine-grained token."
+                    }
+                elif access_e.status == 410:
+                    return {
+                        "success": False,
+                        "message": "Issues are disabled for this repository. Please enable issues or choose a different repository."
+                    }
+                raise
+            
         except GithubException as ge:
             if ge.status == 404:
                 return {
@@ -176,7 +192,7 @@ def create_github_issues(project_plan, ai_prompts, repo_name):
             elif ge.status == 403:
                 return {
                     "success": False,
-                    "message": "Your GitHub token doesn't have access to this repository. Make sure you have 'repo' scope enabled on your token and access to the repository."
+                    "message": "Your GitHub token doesn't have access to this repository. Please use a classic personal access token with full 'repo' scope."
                 }
             else:
                 return {
@@ -198,6 +214,8 @@ def create_github_issues(project_plan, ai_prompts, repo_name):
         
         # Create issues
         created_issues = []
+        failed_issues = []
+        
         for task in tasks:
             task_title = task.get('title', 'Unnamed Task')
             task_description = task.get('description', '')
@@ -236,13 +254,37 @@ def create_github_issues(project_plan, ai_prompts, repo_name):
                 })
             except GithubException as ie:
                 app.logger.error(f"Error creating issue '{task_title}': {str(ie)}")
+                failed_issues.append({
+                    "title": task_title,
+                    "error": str(ie)
+                })
+                
+                # If this is a 403 error, it means we don't have permission, so stop trying more issues
+                if ie.status == 403 and "Resource not accessible by personal access token" in str(ie):
+                    return {
+                        "success": False,
+                        "message": "Your token doesn't have sufficient permissions to create issues in this repository. You need a classic personal access token with the 'repo' scope enabled, not a fine-grained token.",
+                        "issues_created": created_issues,
+                        "issues_failed": failed_issues
+                    }
+                
                 # Continue with other issues even if one fails
                 continue
             
         if not created_issues:
             return {
                 "success": False,
-                "message": "Failed to create any issues. Please check your GitHub token permissions."
+                "message": "Failed to create any issues. Please check your GitHub token permissions.",
+                "issues_failed": failed_issues
+            }
+            
+        if failed_issues:
+            return {
+                "success": True,
+                "partial": True,
+                "issues": created_issues,
+                "issues_failed": failed_issues,
+                "message": f"Created {len(created_issues)} issues successfully in {repo_name}, but {len(failed_issues)} issues failed."
             }
             
         return {
@@ -586,6 +628,21 @@ def get_github_repos():
         # Try to get user login to verify token is valid
         user_login = user.login
         
+        # Check if this is likely a fine-grained token
+        is_fine_grained = False
+        try:
+            # Attempt an operation that only works with classic tokens with full scope
+            # Fine-grained tokens will typically fail here
+            user.get_organization_membership("nonexistent-org-to-test-token-type")
+        except GithubException as e:
+            # Status 404 means the org doesn't exist but token has right scopes
+            # Status 403 often means it's a fine-grained token or missing scopes
+            if e.status == 403 and "Resource not accessible by integration" in str(e):
+                is_fine_grained = True
+        except:
+            # Other errors don't indicate a fine-grained token
+            pass
+        
         # Get repositories the user has access to
         repos = []
         
@@ -624,11 +681,35 @@ def get_github_repos():
         # Sort repositories: first user's own repos, then alphabetically
         repos = sorted(repos, key=lambda r: (not r['is_owner'], r['full_name'].lower()))
         
-        return jsonify({
+        # Filter out repositories where issues are disabled
+        repos_with_issues = [r for r in repos if r['has_issues']]
+        repos_without_issues = [r for r in repos if not r['has_issues']]
+        
+        response = {
             'success': True,
             'user': user_login,
-            'repositories': repos
-        })
+            'repositories': repos_with_issues
+        }
+        
+        # Add warnings if needed
+        warnings = []
+        
+        if is_fine_grained:
+            warnings.append("It appears you're using a fine-grained token. These tokens often don't work for issue creation. Please use a classic token with the 'repo' scope instead.")
+
+        if len(repos_without_issues) > 0:
+            warnings.append(f"{len(repos_without_issues)} repositories were hidden because they have issues disabled.")
+                
+        if len(repos_with_issues) == 0:
+            if len(repos) > 0:
+                warnings.append("All your repositories have issues disabled. Please enable issues in at least one repository.")
+            else:
+                warnings.append("No repositories found with your token. Make sure it has the 'repo' scope.")
+                
+        if warnings:
+            response['warnings'] = warnings
+        
+        return jsonify(response)
     
     except GithubException as e:
         app.logger.error(f"GitHub API error: {str(e)}")
