@@ -98,7 +98,7 @@ const About = () => {
           GitHub Integration Guide
         </Typography>
         <Typography variant="body1" paragraph>
-          To use the GitHub issues feature, you'll need to:
+          Our improved GitHub integration makes it easy to create issues in your repositories:
         </Typography>
         <List>
           <ListItem>
@@ -120,11 +120,11 @@ const About = () => {
               <GitHubIcon color="primary" />
             </ListItemIcon>
             <ListItemText 
-              primary="Specify your repository" 
+              primary="Select from your repositories" 
               secondary={
                 <>
-                  Enter your repository in the format "username/repository". For example: "your-username/project-name". 
-                  You must have access to create issues in this repository, and it must exist.
+                  After entering your GitHub token, we'll automatically fetch and display all repositories you have access to.
+                  Simply select the repository where you want to create issues from the dropdown menu.
                 </>
               }
             />
@@ -144,7 +144,7 @@ const About = () => {
             </ListItemIcon>
             <ListItemText 
               primary="Check the 'Create GitHub Issues' option" 
-              secondary="Enable this option in the prompt generator form, enter your repository name and token to automatically create issues." 
+              secondary="Enable this option in the prompt generator form, enter your token, select a repository, and we'll automatically create issues for each task." 
             />
           </ListItem>
         </List>

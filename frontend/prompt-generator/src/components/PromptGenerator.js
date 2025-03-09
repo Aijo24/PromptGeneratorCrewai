@@ -17,6 +17,13 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  IconButton,
+  InputAdornment,
+  Tooltip,
 } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import SendIcon from '@mui/icons-material/Send';
@@ -25,6 +32,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import TaskAltIcon from '@mui/icons-material/TaskAlt';
+import RefreshIcon from '@mui/icons-material/Refresh';
 
 const PromptGenerator = () => {
   const [apiKey, setApiKey] = useState('');
@@ -41,6 +49,10 @@ const PromptGenerator = () => {
   const [createGithubIssues, setCreateGithubIssues] = useState(false);
   const [githubToken, setGithubToken] = useState('');
   const [githubRepo, setGithubRepo] = useState('');
+  const [repositories, setRepositories] = useState([]);
+  const [loadingRepos, setLoadingRepos] = useState(false);
+  const [repoError, setRepoError] = useState('');
+  const [githubUser, setGithubUser] = useState('');
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -107,6 +119,71 @@ const PromptGenerator = () => {
     }
   };
 
+  const fetchRepositories = async (token) => {
+    setLoadingRepos(true);
+    setRepoError('');
+    
+    try {
+      const formData = new FormData();
+      formData.append('github_token', token);
+      
+      const response = await axios.post('/api/github/repos', formData);
+      
+      if (response.data.success) {
+        setRepositories(response.data.repositories);
+        setGithubUser(response.data.user);
+        
+        // If there are repositories, set the first one as default selection
+        if (response.data.repositories.length > 0) {
+          setGithubRepo(response.data.repositories[0].full_name);
+        } else {
+          setRepoError('No repositories found with issue creation permissions.');
+        }
+      } else {
+        setRepoError(response.data.message || 'Failed to fetch repositories.');
+      }
+    } catch (err) {
+      console.error('Error fetching repositories:', err);
+      
+      if (err.response) {
+        setRepoError(err.response.data.message || 'Failed to fetch repositories.');
+      } else if (err.request) {
+        setRepoError('Network error: Unable to connect to the server.');
+      } else {
+        setRepoError('An unexpected error occurred while fetching repositories.');
+      }
+    } finally {
+      setLoadingRepos(false);
+    }
+  };
+  
+  // Handle GitHub token change
+  const handleGithubTokenChange = (e) => {
+    const newToken = e.target.value;
+    setGithubToken(newToken);
+    
+    // Clear repositories when token changes
+    if (!newToken) {
+      setRepositories([]);
+      setGithubRepo('');
+      setGithubUser('');
+    }
+  };
+
+  // Handle GitHub token blur - fetch repositories when user finishes typing token
+  const handleGithubTokenBlur = () => {
+    if (githubToken) {
+      fetchRepositories(githubToken);
+    }
+  };
+
+  // Refresh repositories list
+  const handleRefreshRepos = () => {
+    if (githubToken) {
+      fetchRepositories(githubToken);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -133,7 +210,7 @@ const PromptGenerator = () => {
       }
       
       if (!githubRepo) {
-        setError('Please enter your GitHub repository in the format "username/repo"');
+        setError('Please select a GitHub repository');
         setLoading(false);
         return;
       }
@@ -239,6 +316,56 @@ const PromptGenerator = () => {
     );
   };
 
+  // Render repository selection
+  const renderRepositorySelect = () => {
+    if (!githubToken) {
+      return null;
+    }
+    
+    return (
+      <FormControl fullWidth margin="normal" size="small">
+        <InputLabel id="github-repo-label">GitHub Repository</InputLabel>
+        <Select
+          labelId="github-repo-label"
+          value={githubRepo}
+          onChange={(e) => setGithubRepo(e.target.value)}
+          label="GitHub Repository"
+          disabled={loadingRepos || repositories.length === 0}
+          endAdornment={
+            <InputAdornment position="end">
+              <Tooltip title="Refresh repositories">
+                <IconButton 
+                  edge="end" 
+                  onClick={handleRefreshRepos}
+                  disabled={loadingRepos || !githubToken}
+                >
+                  {loadingRepos ? <CircularProgress size={24} /> : <RefreshIcon />}
+                </IconButton>
+              </Tooltip>
+            </InputAdornment>
+          }
+        >
+          {repositories.map((repo) => (
+            <MenuItem key={repo.full_name} value={repo.full_name}>
+              {repo.full_name}
+              {!repo.has_issues && " (Issues disabled)"}
+            </MenuItem>
+          ))}
+        </Select>
+        {githubUser && (
+          <Typography variant="caption" color="text.secondary">
+            Connected as {githubUser}
+          </Typography>
+        )}
+        {repoError && (
+          <Typography variant="caption" color="error">
+            {repoError}
+          </Typography>
+        )}
+      </FormControl>
+    );
+  };
+
   return (
     <Box>
       <Typography variant="h4" component="h1" gutterBottom align="center">
@@ -329,24 +456,18 @@ const PromptGenerator = () => {
             {createGithubIssues && (
               <>
                 <TextField
-                  label="GitHub Repository"
-                  fullWidth
-                  margin="normal"
-                  value={githubRepo}
-                  onChange={(e) => setGithubRepo(e.target.value)}
-                  helperText="Enter in the format 'username/repository'"
-                  size="small"
-                />
-                <TextField
                   label="GitHub Token"
                   type="password"
                   fullWidth
                   margin="normal"
                   value={githubToken}
-                  onChange={(e) => setGithubToken(e.target.value)}
+                  onChange={handleGithubTokenChange}
+                  onBlur={handleGithubTokenBlur}
                   helperText="Your GitHub personal access token with repo scope"
                   size="small"
                 />
+                
+                {renderRepositorySelect()}
               </>
             )}
           </Box>

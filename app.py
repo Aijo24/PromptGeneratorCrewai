@@ -565,6 +565,93 @@ def validate_api_key():
             'message': message
         }), 400
 
+@app.route('/api/github/repos', methods=['POST'])
+def get_github_repos():
+    """Fetch repositories the user has access to with their GitHub token"""
+    github_token_input = request.form.get('github_token', '')
+    
+    if not github_token_input:
+        return jsonify({
+            'success': False,
+            'message': 'GitHub token is required'
+        }), 400
+    
+    try:
+        # Initialize GitHub client
+        g = Github(github_token_input)
+        
+        # Get authenticated user
+        user = g.get_user()
+        
+        # Try to get user login to verify token is valid
+        user_login = user.login
+        
+        # Get repositories the user has access to
+        repos = []
+        
+        # First get user's own repositories
+        for repo in user.get_repos():
+            # Only include repositories where the user can create issues
+            # (has push access or is owner)
+            if repo.permissions.push or user_login == repo.owner.login:
+                repos.append({
+                    'full_name': repo.full_name,
+                    'name': repo.name,
+                    'owner': repo.owner.login,
+                    'is_owner': user_login == repo.owner.login,
+                    'has_issues': repo.has_issues,
+                    'private': repo.private,
+                    'url': repo.html_url
+                })
+        
+        # Get repositories from organizations the user belongs to
+        for org in user.get_orgs():
+            for repo in org.get_repos():
+                # Check if this repo is already in our list
+                if not any(r['full_name'] == repo.full_name for r in repos):
+                    # Only include if the user has push access (can create issues)
+                    if repo.permissions.push:
+                        repos.append({
+                            'full_name': repo.full_name,
+                            'name': repo.name,
+                            'owner': repo.owner.login,
+                            'is_owner': False,
+                            'has_issues': repo.has_issues,
+                            'private': repo.private,
+                            'url': repo.html_url
+                        })
+        
+        # Sort repositories: first user's own repos, then alphabetically
+        repos = sorted(repos, key=lambda r: (not r['is_owner'], r['full_name'].lower()))
+        
+        return jsonify({
+            'success': True,
+            'user': user_login,
+            'repositories': repos
+        })
+    
+    except GithubException as e:
+        app.logger.error(f"GitHub API error: {str(e)}")
+        error_message = str(e)
+        
+        if "Bad credentials" in error_message:
+            return jsonify({
+                'success': False,
+                'message': "Invalid GitHub token. Please check your Personal Access Token."
+            }), 401
+        else:
+            return jsonify({
+                'success': False,
+                'message': f"GitHub API error: {str(e)}"
+            }), 400
+    
+    except Exception as e:
+        app.logger.error(f"Error fetching repositories: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f"Error fetching repositories: {str(e)}"
+        }), 500
+
 if __name__ == '__main__':
     print(f"Static folder: {app.static_folder}")
     print(f"Static folder exists: {os.path.exists(app.static_folder)}")
