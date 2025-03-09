@@ -1,23 +1,32 @@
 import os
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, session, url_for
 from flask_cors import CORS
 from crewai import Agent, Task, Crew
 from getpass import getpass
 import logging
 import json
 import re
+import uuid
+import requests
 from github import Github, GithubException
 
 app = Flask(__name__, static_folder='frontend/prompt-generator/build', static_url_path='')
-CORS(app)  # Enable CORS for all routes
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24).hex())  # Required for sessions
+CORS(app, supports_credentials=True)  # Enable CORS with credentials
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
-# Try to get API key from environment variable, or set it to an empty string
+# API Keys and configuration
 api_key = os.environ.get("OPENAI_API_KEY", "")
 github_token = os.environ.get("GITHUB_TOKEN", "")
+github_client_id = os.environ.get("GITHUB_CLIENT_ID", "")
+github_client_secret = os.environ.get("GITHUB_CLIENT_SECRET", "")
+github_oauth_redirect = os.environ.get("GITHUB_REDIRECT_URI", "http://localhost:8080/api/github/callback")
 os.environ["OPENAI_MODEL"] = "gpt-4o-mini"
+
+# Store temporary state values for OAuth
+oauth_states = {}
 
 # Helper function to extract content from CrewOutput objects
 def process_crew_output(crew_output):
@@ -467,7 +476,9 @@ def generate_prompts():
     api_key = request.form.get('api_key', '')
     project_requirements = request.form.get('project_requirements', '')
     create_issues = request.form.get('create_issues', 'false').lower() == 'true'
-    github_token_input = request.form.get('github_token', '')
+    
+    # Get GitHub token from session (if OAuth) or from request (if manual)
+    github_token_input = session.get('github_token') or request.form.get('github_token', '')
     github_repo_input = request.form.get('github_repo', '')
     
     # Check if we have the required information
@@ -607,10 +618,138 @@ def validate_api_key():
             'message': message
         }), 400
 
+@app.route('/api/github/login')
+def github_login():
+    """Initiate GitHub OAuth login process"""
+    # Generate a random state parameter to prevent CSRF attacks
+    state = str(uuid.uuid4())
+    oauth_states[state] = True
+    
+    # Store state in session
+    session['oauth_state'] = state
+    
+    # Build the GitHub authorization URL
+    auth_url = (
+        f"https://github.com/login/oauth/authorize"
+        f"?client_id={github_client_id}"
+        f"&redirect_uri={github_oauth_redirect}"
+        f"&scope=repo"  # Request 'repo' scope for issue creation
+        f"&state={state}"
+    )
+    
+    return jsonify({
+        'auth_url': auth_url,
+        'state': state
+    })
+
+@app.route('/api/github/callback')
+def github_callback():
+    """Handle the callback from GitHub OAuth"""
+    # Get the code and state from the query parameters
+    code = request.args.get('code')
+    state = request.args.get('state')
+    
+    # Verify the state parameter
+    if state != session.get('oauth_state'):
+        app.logger.error(f"OAuth state mismatch. Expected: {session.get('oauth_state')}, Got: {state}")
+        return redirect("/login-failed?error=invalid_state")
+    
+    # Clean up state
+    if state in oauth_states:
+        del oauth_states[state]
+    session.pop('oauth_state', None)
+    
+    # Exchange the code for an access token
+    token_url = "https://github.com/login/oauth/access_token"
+    payload = {
+        'client_id': github_client_id,
+        'client_secret': github_client_secret,
+        'code': code,
+        'redirect_uri': github_oauth_redirect
+    }
+    headers = {'Accept': 'application/json'}
+    
+    try:
+        response = requests.post(token_url, data=payload, headers=headers)
+        token_data = response.json()
+        
+        if 'error' in token_data:
+            app.logger.error(f"GitHub OAuth error: {token_data['error']}")
+            return redirect("/login-failed?error=" + token_data['error'])
+        
+        # Get the access token
+        access_token = token_data.get('access_token')
+        
+        if not access_token:
+            app.logger.error("No access token received from GitHub")
+            return redirect("/login-failed?error=no_token")
+        
+        # Get user info to verify the token
+        g = Github(access_token)
+        user = g.get_user()
+        
+        # Store the token in session
+        session['github_token'] = access_token
+        session['github_user'] = user.login
+        
+        # Redirect back to the frontend with success parameter
+        return redirect("/?login=success")
+        
+    except Exception as e:
+        app.logger.error(f"Error during GitHub OAuth callback: {str(e)}")
+        return redirect("/login-failed?error=server_error")
+
+@app.route('/api/github/user')
+def github_user():
+    """Get the current GitHub user info"""
+    # Get the token from session
+    token = session.get('github_token')
+    user = session.get('github_user')
+    
+    if not token or not user:
+        return jsonify({
+            'authenticated': False
+        })
+    
+    try:
+        # Verify token is still valid
+        g = Github(token)
+        current_user = g.get_user()
+        
+        if current_user.login != user:
+            # Something's wrong, clear the session
+            session.pop('github_token', None)
+            session.pop('github_user', None)
+            return jsonify({
+                'authenticated': False
+            })
+        
+        return jsonify({
+            'authenticated': True,
+            'user': user,
+            'avatar_url': current_user.avatar_url,
+            'html_url': current_user.html_url
+        })
+    except:
+        # If there's an error, the token is likely invalid
+        session.pop('github_token', None)
+        session.pop('github_user', None)
+        return jsonify({
+            'authenticated': False
+        })
+
+@app.route('/api/github/logout')
+def github_logout():
+    """Log out the user by clearing their GitHub token"""
+    session.pop('github_token', None)
+    session.pop('github_user', None)
+    return jsonify({'success': True})
+
 @app.route('/api/github/repos', methods=['POST'])
 def get_github_repos():
     """Fetch repositories the user has access to with their GitHub token"""
-    github_token_input = request.form.get('github_token', '')
+    # Get token either from session (if using OAuth) or from request (if manually provided)
+    github_token_input = session.get('github_token') or request.form.get('github_token', '')
     
     if not github_token_input:
         return jsonify({

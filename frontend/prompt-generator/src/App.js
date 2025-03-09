@@ -8,6 +8,7 @@ import { Container } from '@mui/material';
 import Header from './components/Header';
 import PromptGenerator from './components/PromptGenerator';
 import About from './components/About';
+import LoginFailed from './components/LoginFailed';
 
 // Create a custom theme
 const theme = createTheme({
@@ -64,6 +65,7 @@ function App() {
           <Routes>
             <Route path="/" element={<PromptGenerator />} />
             <Route path="/about" element={<About />} />
+            <Route path="/login-failed" element={<LoginFailed />} />
           </Routes>
         </Container>
       </Router>

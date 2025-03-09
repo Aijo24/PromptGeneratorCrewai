@@ -107,10 +107,24 @@ const About = () => {
               <GitHubIcon color="primary" />
             </ListItemIcon>
             <ListItemText 
-              primary="Create a Classic Personal Access Token (PAT)" 
+              primary="One-Click GitHub Login" 
               secondary={
                 <>
-                  <strong>Important:</strong> You must use a classic token, not a fine-grained token. Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token. 
+                  Simply click the "Login with GitHub" button to authorize the application. This is the recommended
+                  and most secure way to connect your GitHub account, as it uses OAuth for authentication.
+                </>
+              }
+            />
+          </ListItem>
+          <ListItem>
+            <ListItemIcon>
+              <GitHubIcon color="primary" />
+            </ListItemIcon>
+            <ListItemText 
+              primary="Alternative: Classic Personal Access Token" 
+              secondary={
+                <>
+                  If you prefer, you can still use a classic token instead of OAuth login. Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token. 
                   <Box component="div" sx={{ mt: 1, p: 1, bgcolor: '#f8f9fa', borderRadius: 1 }}>
                     Make sure to select the full "repo" scope checkbox (not just individual repo permissions).
                     Fine-grained tokens will not work for issue creation even if they appear to have issue permissions.
@@ -127,7 +141,7 @@ const About = () => {
               primary="Select from your repositories" 
               secondary={
                 <>
-                  After entering your GitHub token, we'll automatically fetch and display all repositories you have access to.
+                  After authenticating, we'll automatically fetch and display all repositories you have access to.
                   Simply select the repository where you want to create issues from the dropdown menu.
                   <Box component="div" sx={{ mt: 1, p: 1, bgcolor: '#f8f9fa', borderRadius: 1 }}>
                     Note: Make sure issues are enabled for your repository (Settings → Features → Issues).
@@ -141,8 +155,8 @@ const About = () => {
               <SecurityIcon color="primary" />
             </ListItemIcon>
             <ListItemText 
-              primary="Keep your token secure" 
-              secondary="Your token is like a password. We don't store it, but transmit it securely only when creating issues." 
+              primary="Security and Privacy" 
+              secondary="Your GitHub authentication is secure. OAuth tokens are stored in your session and aren't accessible to other users." 
             />
           </ListItem>
         </List>
@@ -174,17 +188,8 @@ const About = () => {
               <GitHubIcon color="primary" />
             </ListItemIcon>
             <ListItemText 
-              primary="Creating a proper classic token"
-              secondary={
-                <>
-                  1. Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
-                  2. Click "Generate new token (classic)"
-                  3. Give it a descriptive name
-                  4. Select the full "repo" checkbox (not individual sub-permissions)
-                  5. Click "Generate token"
-                  6. Copy the token immediately (it won't be shown again)
-                </>
-              }
+              primary="Recommended: Use OAuth Login" 
+              secondary="The simplest solution to permission issues is to use the 'Login with GitHub' button instead of manually entering a token."
             />
           </ListItem>
         </List>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
   Box,
@@ -24,6 +24,9 @@ import {
   IconButton,
   InputAdornment,
   Tooltip,
+  Avatar,
+  Chip,
+  Divider,
 } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import SendIcon from '@mui/icons-material/Send';
@@ -33,6 +36,11 @@ import ErrorIcon from '@mui/icons-material/Error';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import TaskAltIcon from '@mui/icons-material/TaskAlt';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import LoginIcon from '@mui/icons-material/Login';
+import LogoutIcon from '@mui/icons-material/Logout';
+
+// Configure axios to include credentials in requests
+axios.defaults.withCredentials = true;
 
 const PromptGenerator = () => {
   const [apiKey, setApiKey] = useState('');
@@ -53,6 +61,111 @@ const PromptGenerator = () => {
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [repoError, setRepoError] = useState('');
   const [githubUser, setGithubUser] = useState('');
+  
+  // GitHub OAuth state
+  const [githubAuthLoading, setGithubAuthLoading] = useState(true);
+  const [githubAuth, setGithubAuth] = useState({
+    authenticated: false,
+    user: null,
+    avatar_url: null,
+    html_url: null
+  });
+  const [loginError, setLoginError] = useState('');
+  
+  // Check if user is already authenticated with GitHub on page load
+  useEffect(() => {
+    checkGithubAuth();
+    
+    // Check URL parameters for login errors
+    const urlParams = new URLSearchParams(window.location.search);
+    const loginStatus = urlParams.get('login');
+    const loginError = urlParams.get('error');
+    
+    if (loginError) {
+      setLoginError(`Login failed: ${loginError}`);
+    } else if (loginStatus === 'success') {
+      // Clean up URL parameters
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+  }, []);
+  
+  // Check GitHub authentication status
+  const checkGithubAuth = async () => {
+    setGithubAuthLoading(true);
+    
+    try {
+      const response = await axios.get('/api/github/user');
+      
+      if (response.data.authenticated) {
+        setGithubAuth({
+          authenticated: true,
+          user: response.data.user,
+          avatar_url: response.data.avatar_url,
+          html_url: response.data.html_url
+        });
+        
+        // Automatically check for repositories
+        fetchRepositories();
+        
+        // Enable issue creation by default when logged in
+        setCreateGithubIssues(true);
+      } else {
+        setGithubAuth({
+          authenticated: false,
+          user: null,
+          avatar_url: null,
+          html_url: null
+        });
+      }
+    } catch (err) {
+      console.error('Failed to check GitHub authentication status:', err);
+      setGithubAuth({
+        authenticated: false,
+        user: null,
+        avatar_url: null,
+        html_url: null
+      });
+    } finally {
+      setGithubAuthLoading(false);
+    }
+  };
+  
+  // Handle GitHub login button click
+  const handleGithubLogin = async () => {
+    setLoginError('');
+    
+    try {
+      const response = await axios.get('/api/github/login');
+      
+      if (response.data.auth_url) {
+        // Redirect to GitHub OAuth authorization
+        window.location.href = response.data.auth_url;
+      }
+    } catch (err) {
+      console.error('Failed to initiate GitHub login:', err);
+      setLoginError('Failed to initiate GitHub login. Please try again.');
+    }
+  };
+  
+  // Handle GitHub logout button click
+  const handleGithubLogout = async () => {
+    try {
+      await axios.get('/api/github/logout');
+      setGithubAuth({
+        authenticated: false,
+        user: null,
+        avatar_url: null,
+        html_url: null
+      });
+      setRepositories([]);
+      setGithubRepo('');
+      setGithubUser('');
+      setCreateGithubIssues(false);
+    } catch (err) {
+      console.error('Failed to logout from GitHub:', err);
+    }
+  };
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -119,13 +232,17 @@ const PromptGenerator = () => {
     }
   };
 
-  const fetchRepositories = async (token) => {
+  const fetchRepositories = async (token = null) => {
     setLoadingRepos(true);
     setRepoError('');
     
     try {
       const formData = new FormData();
-      formData.append('github_token', token);
+      
+      // Use token parameter if provided, otherwise rely on session token from OAuth
+      if (token) {
+        formData.append('github_token', token);
+      }
       
       const response = await axios.post('/api/github/repos', formData);
       
@@ -207,18 +324,16 @@ const PromptGenerator = () => {
       return;
     }
     
-    if (createGithubIssues) {
-      if (!githubToken) {
-        setError('Please enter your GitHub token to create issues');
-        setLoading(false);
-        return;
-      }
-      
-      if (!githubRepo) {
-        setError('Please select a GitHub repository');
-        setLoading(false);
-        return;
-      }
+    if (createGithubIssues && !githubAuth.authenticated && !githubToken) {
+      setError('Please log in with GitHub or enter a GitHub token to create issues');
+      setLoading(false);
+      return;
+    }
+    
+    if (createGithubIssues && !githubRepo) {
+      setError('Please select a GitHub repository');
+      setLoading(false);
+      return;
     }
     
     // Create form data
@@ -227,8 +342,12 @@ const PromptGenerator = () => {
     formData.append('project_requirements', projectRequirements);
     formData.append('create_issues', createGithubIssues.toString());
     
-    if (createGithubIssues) {
+    // Only include token if manually entered (not using OAuth)
+    if (createGithubIssues && !githubAuth.authenticated && githubToken) {
       formData.append('github_token', githubToken);
+    }
+    
+    if (createGithubIssues) {
       formData.append('github_repo', githubRepo);
     }
     
@@ -498,6 +617,105 @@ const PromptGenerator = () => {
     );
   };
 
+  // Render GitHub authentication section
+  const renderGithubAuth = () => {
+    if (githubAuthLoading) {
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
+          <CircularProgress size={24} sx={{ mr: 2 }} />
+          <Typography variant="body2">Checking GitHub authentication...</Typography>
+        </Box>
+      );
+    }
+    
+    if (githubAuth.authenticated) {
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, mb: 2 }}>
+          <Chip
+            avatar={<Avatar alt={githubAuth.user} src={githubAuth.avatar_url} />}
+            label={`Logged in as ${githubAuth.user}`}
+            variant="outlined"
+            color="primary"
+            onDelete={handleGithubLogout}
+            deleteIcon={<LogoutIcon />}
+            sx={{ mr: 2 }}
+          />
+          <Link href={githubAuth.html_url} target="_blank" rel="noopener noreferrer">
+            <Typography variant="body2">View Profile</Typography>
+          </Link>
+        </Box>
+      );
+    }
+    
+    return (
+      <Box sx={{ mt: 2, mb: 2 }}>
+        <Button
+          variant="outlined"
+          startIcon={<GitHubIcon />}
+          onClick={handleGithubLogin}
+          sx={{ mr: 2 }}
+        >
+          Login with GitHub
+        </Button>
+        
+        <Typography variant="caption" color="text.secondary">
+          Recommended for easier repository access
+        </Typography>
+        
+        {loginError && (
+          <Alert severity="error" sx={{ mt: 1 }}>
+            {loginError}
+          </Alert>
+        )}
+        
+        <Divider sx={{ my: 2 }}>
+          <Typography variant="caption" color="text.secondary">OR</Typography>
+        </Divider>
+      </Box>
+    );
+  };
+
+  // Render GitHub section (for issue creation)
+  const renderGithubSection = () => {
+    return (
+      <Box sx={{ mt: 2, mb: 2 }}>
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={createGithubIssues}
+              onChange={(e) => setCreateGithubIssues(e.target.checked)}
+              icon={<GitHubIcon />}
+              checkedIcon={<GitHubIcon />}
+            />
+          }
+          label="Create GitHub Issues"
+        />
+        
+        {createGithubIssues && (
+          <>
+            {renderGithubAuth()}
+            
+            {!githubAuth.authenticated && (
+              <TextField
+                label="GitHub Token"
+                type="password"
+                fullWidth
+                margin="normal"
+                value={githubToken}
+                onChange={handleGithubTokenChange}
+                onBlur={handleGithubTokenBlur}
+                helperText="Your GitHub personal access token with repo scope"
+                size="small"
+              />
+            )}
+            
+            {renderRepositorySelect()}
+          </>
+        )}
+      </Box>
+    );
+  };
+
   return (
     <Box>
       <Typography variant="h4" component="h1" gutterBottom align="center">
@@ -572,37 +790,7 @@ const PromptGenerator = () => {
             placeholder="Describe your project and requirements in detail..."
           />
           
-          <Box sx={{ mt: 2, mb: 2 }}>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={createGithubIssues}
-                  onChange={(e) => setCreateGithubIssues(e.target.checked)}
-                  icon={<GitHubIcon />}
-                  checkedIcon={<GitHubIcon />}
-                />
-              }
-              label="Create GitHub Issues"
-            />
-            
-            {createGithubIssues && (
-              <>
-                <TextField
-                  label="GitHub Token"
-                  type="password"
-                  fullWidth
-                  margin="normal"
-                  value={githubToken}
-                  onChange={handleGithubTokenChange}
-                  onBlur={handleGithubTokenBlur}
-                  helperText="Your GitHub personal access token with repo scope"
-                  size="small"
-                />
-                
-                {renderRepositorySelect()}
-              </>
-            )}
-          </Box>
+          {renderGithubSection()}
           
           <Button
             type="submit"
