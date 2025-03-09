@@ -5,6 +5,7 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import SecurityIcon from '@mui/icons-material/Security';
 import PeopleIcon from '@mui/icons-material/People';
+import GitHubIcon from '@mui/icons-material/GitHub';
 
 const About = () => {
   return (
@@ -20,37 +21,46 @@ const About = () => {
         <Typography variant="h5" gutterBottom>
           What does this tool do?
         </Typography>
-        <Typography paragraph>
-          The AI Prompt Generator is a powerful tool that leverages advanced AI models to transform your project requirements into:
+        <Typography variant="body1" paragraph>
+          The AI Prompt Generator helps you create well-structured project plans and AI prompts for different roles and tasks in your project. It uses CrewAI to generate:
         </Typography>
         <List>
-          <ListItem>
-            <ListItemIcon>
-              <ScheduleIcon color="primary" />
-            </ListItemIcon>
-            <ListItemText 
-              primary="Comprehensive Project Plans" 
-              secondary="Detailed plans with milestones, resource allocation, and task assignments"
-            />
-          </ListItem>
           <ListItem>
             <ListItemIcon>
               <AutoAwesomeIcon color="primary" />
             </ListItemIcon>
             <ListItemText 
-              primary="AI Task Prompts" 
-              secondary="Well-crafted prompts for each task that can be used with AI systems"
+              primary="Detailed project plans" 
+              secondary="Get a comprehensive project plan with milestones, resource allocations, and task breakdowns." 
+            />
+          </ListItem>
+          <ListItem>
+            <ListItemIcon>
+              <CodeIcon color="primary" />
+            </ListItemIcon>
+            <ListItemText 
+              primary="AI prompts for each task" 
+              secondary="Receive specific, well-crafted prompts that you can use with AI systems to execute each task in your project." 
+            />
+          </ListItem>
+          <ListItem>
+            <ListItemIcon>
+              <GitHubIcon color="primary" />
+            </ListItemIcon>
+            <ListItemText 
+              primary="GitHub issues integration" 
+              secondary="Automatically create GitHub issues for each task in your project plan, complete with detailed prompts for each assignee." 
             />
           </ListItem>
         </List>
+      </Paper>
 
-        <Divider sx={{ my: 3 }} />
-
+      <Paper elevation={3} sx={{ p: 4, mb: 4 }}>
         <Typography variant="h5" gutterBottom>
           How it works
         </Typography>
-        <Typography paragraph>
-          Behind the scenes, we use a system of AI agents powered by CrewAI:
+        <Typography variant="body1" paragraph>
+          Our system uses CrewAI, a framework for orchestrating role-playing AI agents. When you submit your project requirements:
         </Typography>
         <List>
           <ListItem>
@@ -59,7 +69,7 @@ const About = () => {
             </ListItemIcon>
             <ListItemText 
               primary="Project Manager Agent" 
-              secondary="Creates a structured project plan based on your requirements"
+              secondary="First, a Project Manager agent analyzes your requirements and creates a detailed project plan." 
             />
           </ListItem>
           <ListItem>
@@ -68,13 +78,60 @@ const About = () => {
             </ListItemIcon>
             <ListItemText 
               primary="Prompt Engineer Agent" 
-              secondary="Designs effective prompts for each task identified in the project plan"
+              secondary="Next, a Prompt Engineer agent takes the project plan and creates specific prompts for each task." 
+            />
+          </ListItem>
+          <ListItem>
+            <ListItemIcon>
+              <GitHubIcon color="primary" />
+            </ListItemIcon>
+            <ListItemText 
+              primary="GitHub Issues Agent" 
+              secondary="Finally, if enabled, a GitHub Issues agent creates detailed issues in your repository with task-specific prompts." 
             />
           </ListItem>
         </List>
+      </Paper>
 
-        <Divider sx={{ my: 3 }} />
+      <Paper elevation={3} sx={{ p: 4, mb: 4 }}>
+        <Typography variant="h5" gutterBottom>
+          GitHub Integration Guide
+        </Typography>
+        <Typography variant="body1" paragraph>
+          To use the GitHub issues feature, you'll need to:
+        </Typography>
+        <List>
+          <ListItem>
+            <ListItemIcon>
+              <GitHubIcon color="primary" />
+            </ListItemIcon>
+            <ListItemText 
+              primary="Create a Personal Access Token (PAT)" 
+              secondary="Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token. Ensure it has 'repo' scope." 
+            />
+          </ListItem>
+          <ListItem>
+            <ListItemIcon>
+              <SecurityIcon color="primary" />
+            </ListItemIcon>
+            <ListItemText 
+              primary="Keep your token secure" 
+              secondary="Your token is like a password. We don't store it, but transmit it securely only when creating issues." 
+            />
+          </ListItem>
+          <ListItem>
+            <ListItemIcon>
+              <AutoAwesomeIcon color="primary" />
+            </ListItemIcon>
+            <ListItemText 
+              primary="Check the 'Create GitHub Issues' option" 
+              secondary="Enable this option in the prompt generator form and enter your token to automatically create issues." 
+            />
+          </ListItem>
+        </List>
+      </Paper>
 
+      <Paper elevation={3} sx={{ p: 4, mb: 4 }}>
         <Typography variant="h5" gutterBottom>
           Privacy and Security
         </Typography>

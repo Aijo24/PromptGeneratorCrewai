@@ -5,6 +5,8 @@ from crewai import Agent, Task, Crew
 from getpass import getpass
 import logging
 import json
+import re
+from github import Github, GithubException
 
 app = Flask(__name__, static_folder='frontend/prompt-generator/build', static_url_path='')
 CORS(app)  # Enable CORS for all routes
@@ -14,6 +16,8 @@ logging.basicConfig(level=logging.INFO)
 
 # Try to get API key from environment variable, or set it to an empty string
 api_key = os.environ.get("OPENAI_API_KEY", "")
+github_token = os.environ.get("GITHUB_TOKEN", "")
+github_repo = os.environ.get("GITHUB_REPO", "Aijo24/PromptGeneratorCrewai")
 os.environ["OPENAI_MODEL"] = "gpt-4o-mini"
 
 # Helper function to extract content from CrewOutput objects
@@ -128,6 +132,217 @@ def create_ai_prompts(project_plan):
     ai_prompts = prompt_crew.kickoff()
     return ai_prompts
 
+def create_github_issues(project_plan, ai_prompts):
+    """
+    Create GitHub issues for each task in the project plan, with prompts for each agent.
+    
+    Args:
+        project_plan (str): The project plan with tasks
+        ai_prompts (str): The AI prompts for each task
+        
+    Returns:
+        list: A list of created issue URLs
+    """
+    if not github_token:
+        app.logger.warning("GitHub token not provided. Issues will not be created.")
+        return {
+            "success": False,
+            "message": "GitHub token not provided. Set the GITHUB_TOKEN environment variable."
+        }
+    
+    try:
+        # Initialize GitHub client
+        g = Github(github_token)
+        repo = g.get_repo(github_repo)
+        
+        # Extract tasks from project plan
+        tasks = extract_tasks_from_plan(project_plan)
+        
+        # Match prompts to tasks
+        prompts_by_task = match_prompts_to_tasks(ai_prompts, tasks)
+        
+        # Create issues
+        created_issues = []
+        for task in tasks:
+            task_title = task.get('title', 'Unnamed Task')
+            task_description = task.get('description', '')
+            task_assignee = task.get('assignee', '')
+            
+            # Get prompt for this task
+            prompt = prompts_by_task.get(task_title, "No specific prompt available for this task.")
+            
+            # Create issue body with task description and prompt
+            issue_body = f"""
+## Task Description
+{task_description}
+
+## Assignee
+{task_assignee}
+
+## AI Prompt
+```
+{prompt}
+```
+            """
+            
+            # Create the issue
+            issue = repo.create_issue(
+                title=task_title,
+                body=issue_body,
+                labels=["ai-generated", task_assignee]
+            )
+            
+            created_issues.append({
+                "title": task_title,
+                "url": issue.html_url,
+                "assignee": task_assignee,
+                "number": issue.number
+            })
+            
+        return {
+            "success": True,
+            "issues": created_issues,
+            "message": f"Created {len(created_issues)} issues successfully."
+        }
+        
+    except GithubException as e:
+        app.logger.error(f"GitHub API error: {str(e)}")
+        return {
+            "success": False,
+            "message": f"GitHub API error: {str(e)}"
+        }
+    except Exception as e:
+        app.logger.error(f"Error creating GitHub issues: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Error creating GitHub issues: {str(e)}"
+        }
+
+def extract_tasks_from_plan(project_plan):
+    """Extract tasks from the project plan text"""
+    tasks = []
+    
+    # Try to find tasks in various formats
+    # Look for numbered tasks, tasks with headers, or tasks in lists
+    task_patterns = [
+        r'(?:Task|TASK)\s+\d+:?\s*(.*?)(?=(?:Task|TASK)\s+\d+:|$)',  # Task 1: Do something
+        r'(?:\d+\.|\-|\*)\s+(.*?)(?=(?:\d+\.|\-|\*)|$)',  # 1. Do something or - Do something
+        r'(?:Milestone|Phase)\s+\d+:?\s*(.*?)(?=(?:Milestone|Phase)\s+\d+:|$)'  # Milestone 1: Planning
+    ]
+    
+    for pattern in task_patterns:
+        matches = re.findall(pattern, project_plan, re.DOTALL)
+        if matches:
+            for match in matches:
+                lines = match.strip().split('\n')
+                if not lines:
+                    continue
+                    
+                # The first line is the task title
+                title = lines[0].strip()
+                
+                # The rest is the description
+                description = '\n'.join(lines[1:]).strip() if len(lines) > 1 else ""
+                
+                # Try to extract assignee if present
+                assignee = "Unassigned"
+                assignee_patterns = [
+                    r'(?:Assigned to|Assignee|Responsible):\s*(.*?)(?=\n|$)',
+                    r'(?:Assigned to|Assignee|Responsible):\s*(.*?)(?=\n|$)'
+                ]
+                
+                for a_pattern in assignee_patterns:
+                    a_match = re.search(a_pattern, match, re.IGNORECASE)
+                    if a_match:
+                        assignee = a_match.group(1).strip()
+                        break
+                
+                tasks.append({
+                    "title": title,
+                    "description": description,
+                    "assignee": assignee
+                })
+    
+    # If no tasks found, try to split by common section markers
+    if not tasks:
+        sections = re.split(r'\n\s*#+\s*|(?:\n\s*){2,}', project_plan)
+        for section in sections:
+            if len(section.strip()) > 10:  # Avoid empty or very short sections
+                title = section.split('\n')[0].strip()
+                description = '\n'.join(section.split('\n')[1:]).strip()
+                tasks.append({
+                    "title": title,
+                    "description": description,
+                    "assignee": "Unassigned"
+                })
+    
+    return tasks
+
+def match_prompts_to_tasks(ai_prompts, tasks):
+    """Match AI prompts to tasks based on similarity of titles"""
+    prompts_by_task = {}
+    
+    # Try to split prompts by task or section
+    prompt_sections = re.split(r'\n\s*#+\s*|\n\s*Task\s+\d+:|\n\s*Prompt\s+\d+:', ai_prompts)
+    
+    # If we have about the same number of sections as tasks, try to match them
+    if len(prompt_sections) >= len(tasks):
+        for i, task in enumerate(tasks):
+            if i < len(prompt_sections):
+                prompts_by_task[task["title"]] = prompt_sections[i].strip()
+    else:
+        # Otherwise, just assign the whole prompt to each task
+        for task in tasks:
+            prompts_by_task[task["title"]] = ai_prompts.strip()
+    
+    return prompts_by_task
+
+# GitHub Issues Agent
+def create_github_issues_agent(project_plan, ai_prompts):
+    # GitHub Issues Agent
+    github_agent = Agent(
+        role="GitHub Issues Manager",
+        goal=(
+            "Create well-structured GitHub issues for each task in the project plan, "
+            "including appropriate AI prompts for each task."
+        ),
+        backstory=(
+            "As a dedicated project organizer with extensive experience in GitHub issue management, "
+            "I excel at converting project plans into actionable tasks with clear instructions. "
+            "I ensure that each issue contains all necessary information for successful completion."
+        ),
+        verbose=True,
+        llm="gpt-4o-mini",
+    )
+    
+    # GitHub Issues Task
+    github_task = Task(
+        agent=github_agent,
+        description=(
+            f"Based on this project plan:\n\n{project_plan}\n\n"
+            f"And these AI prompts:\n\n{ai_prompts}\n\n"
+            "1. Extract all tasks from the project plan\n"
+            "2. Identify the appropriate AI agent for each task\n"
+            "3. Match the relevant AI prompt to each task\n"
+            "4. Format each task as a GitHub issue with clear title, description, and prompt\n"
+            "5. Create a summary of all issues created"
+        ),
+        expected_output=(
+            "A collection of well-structured GitHub issues with appropriate assignees and AI prompts."
+        ),
+    )
+    
+    # Create GitHub Issues crew
+    github_crew = Crew(
+        agents=[github_agent],
+        tasks=[github_task],
+        verbose=True
+    )
+    
+    # Run GitHub Issues task
+    result = github_crew.kickoff()
+    return result
+
 @app.route('/api/health')
 def health_check():
     return jsonify({
@@ -155,6 +370,8 @@ def generate_prompts():
     # Get the OpenAI API key and project requirements from the form
     api_key = request.form.get('api_key', '')
     project_requirements = request.form.get('project_requirements', '')
+    create_issues = request.form.get('create_issues', 'false').lower() == 'true'
+    github_token_input = request.form.get('github_token', '')
     
     # Check if we have the required information
     if not api_key or not project_requirements:
@@ -164,6 +381,12 @@ def generate_prompts():
     
     # Set the API key in the environment
     os.environ["OPENAI_API_KEY"] = api_key
+    
+    # Set GitHub token if provided
+    if github_token_input:
+        os.environ["GITHUB_TOKEN"] = github_token_input
+        global github_token
+        github_token = github_token_input
     
     try:
         # Generate the project plan
@@ -178,11 +401,21 @@ def generate_prompts():
         # Process the CrewOutput object to extract meaningful content
         ai_prompts = process_crew_output(ai_prompts_output)
         
+        # Create GitHub issues if requested
+        github_issues_result = None
+        if create_issues and github_token:
+            github_issues_result = create_github_issues(project_plan, ai_prompts)
+        
         # Return the results as strings (which are JSON serializable)
-        return jsonify({
+        response = {
             'project_plan': project_plan,
             'ai_prompts': ai_prompts
-        })
+        }
+        
+        if github_issues_result:
+            response['github_issues'] = github_issues_result
+        
+        return jsonify(response)
     except Exception as e:
         error_message = str(e)
         if "APIError: OpenAIException - Connection error" in error_message:

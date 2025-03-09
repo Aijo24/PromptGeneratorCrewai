@@ -11,12 +11,21 @@ import {
   Tabs,
   Tab,
   Divider,
+  FormControlLabel,
+  Checkbox,
+  Link,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
 } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import SendIcon from '@mui/icons-material/Send';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
+import GitHubIcon from '@mui/icons-material/GitHub';
+import TaskAltIcon from '@mui/icons-material/TaskAlt';
 
 const PromptGenerator = () => {
   const [apiKey, setApiKey] = useState('');
@@ -27,8 +36,11 @@ const PromptGenerator = () => {
   const [results, setResults] = useState({
     projectPlan: '',
     aiPrompts: '',
+    githubIssues: null,
   });
   const [activeTab, setActiveTab] = useState(0);
+  const [createGithubIssues, setCreateGithubIssues] = useState(false);
+  const [githubToken, setGithubToken] = useState('');
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -113,18 +125,37 @@ const PromptGenerator = () => {
       return;
     }
     
+    if (createGithubIssues && !githubToken) {
+      setError('Please enter your GitHub token to create issues');
+      setLoading(false);
+      return;
+    }
+    
     // Create form data
     const formData = new FormData();
     formData.append('api_key', apiKey);
     formData.append('project_requirements', projectRequirements);
+    formData.append('create_issues', createGithubIssues.toString());
+    
+    if (createGithubIssues && githubToken) {
+      formData.append('github_token', githubToken);
+    }
     
     try {
       const response = await axios.post('/api/generate-prompts', formData);
+      
       setResults({
         projectPlan: response.data.project_plan,
         aiPrompts: response.data.ai_prompts,
+        githubIssues: response.data.github_issues || null,
       });
+      
       setActiveTab(0); // Switch to project plan tab after successful generation
+      
+      // If GitHub issues were created successfully, switch to the GitHub issues tab
+      if (response.data.github_issues && response.data.github_issues.success) {
+        setActiveTab(2);
+      }
     } catch (err) {
       console.error('Error:', err);
       
@@ -144,14 +175,75 @@ const PromptGenerator = () => {
     }
   };
 
+  // Render GitHub issues tab content
+  const renderGitHubIssuesTab = () => {
+    const { githubIssues } = results;
+    
+    if (!githubIssues) {
+      return (
+        <Box sx={{ mt: 2, p: 2 }}>
+          <Typography variant="body1" color="text.secondary">
+            Enable "Create GitHub Issues" to automatically create issues for each task in your project plan.
+          </Typography>
+        </Box>
+      );
+    }
+    
+    if (!githubIssues.success) {
+      return (
+        <Box sx={{ mt: 2 }}>
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {githubIssues.message}
+          </Alert>
+        </Box>
+      );
+    }
+    
+    return (
+      <Box sx={{ mt: 2 }}>
+        <Alert severity="success" sx={{ mb: 2 }}>
+          {githubIssues.message}
+        </Alert>
+        
+        <Typography variant="h6" gutterBottom>
+          Created Issues:
+        </Typography>
+        
+        <List>
+          {githubIssues.issues.map((issue, index) => (
+            <ListItem key={index} divider={index < githubIssues.issues.length - 1}>
+              <ListItemIcon>
+                <TaskAltIcon color="primary" />
+              </ListItemIcon>
+              <ListItemText
+                primary={
+                  <Link href={issue.url} target="_blank" rel="noopener noreferrer">
+                    #{issue.number}: {issue.title}
+                  </Link>
+                }
+                secondary={`Assignee: ${issue.assignee}`}
+              />
+            </ListItem>
+          ))}
+        </List>
+      </Box>
+    );
+  };
+
   return (
     <Box>
       <Typography variant="h4" component="h1" gutterBottom align="center">
-        AI-Powered Project Prompt Generator
+        AI Prompt Generator
       </Typography>
       <Typography variant="subtitle1" gutterBottom align="center" sx={{ mb: 4 }}>
-        Enter your project requirements and get AI-generated prompts for each task
+        Generate AI agent prompts for your project
       </Typography>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
 
       <Paper elevation={3} sx={{ p: 4, mb: 4 }}>
         <Typography variant="h5" gutterBottom>
@@ -160,14 +252,12 @@ const PromptGenerator = () => {
         <form onSubmit={handleSubmit}>
           <TextField
             label="OpenAI API Key"
-            variant="outlined"
-            fullWidth
             type="password"
+            fullWidth
+            margin="normal"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            margin="normal"
-            required
-            helperText="Your API key is used securely and not stored"
+            helperText="Your API key is only used for this request and never stored"
             InputProps={{
               endAdornment: (
                 <Button 
@@ -205,16 +295,42 @@ const PromptGenerator = () => {
 
           <TextField
             label="Project Requirements"
-            variant="outlined"
-            fullWidth
             multiline
-            rows={6}
+            rows={8}
+            fullWidth
+            margin="normal"
             value={projectRequirements}
             onChange={(e) => setProjectRequirements(e.target.value)}
-            margin="normal"
-            required
-            helperText="Be as detailed as possible to get better results"
+            placeholder="Describe your project and requirements in detail..."
           />
+          
+          <Box sx={{ mt: 2, mb: 2 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={createGithubIssues}
+                  onChange={(e) => setCreateGithubIssues(e.target.checked)}
+                  icon={<GitHubIcon />}
+                  checkedIcon={<GitHubIcon />}
+                />
+              }
+              label="Create GitHub Issues"
+            />
+            
+            {createGithubIssues && (
+              <TextField
+                label="GitHub Token"
+                type="password"
+                fullWidth
+                margin="normal"
+                value={githubToken}
+                onChange={(e) => setGithubToken(e.target.value)}
+                helperText="Your GitHub personal access token with repo scope"
+                size="small"
+              />
+            )}
+          </Box>
+          
           <Button
             type="submit"
             variant="contained"
@@ -223,73 +339,72 @@ const PromptGenerator = () => {
             startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <SendIcon />}
             disabled={loading}
             sx={{ mt: 2 }}
-            fullWidth
           >
             {loading ? 'Generating...' : 'Generate Prompts'}
           </Button>
         </form>
       </Paper>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 4 }}>
-          {error}
-        </Alert>
-      )}
-
-      {(results.projectPlan || results.aiPrompts) && (
-        <Paper elevation={3} sx={{ p: 0, mb: 4 }}>
-          <Tabs value={activeTab} onChange={handleTabChange} centered>
-            <Tab label="Project Plan" />
-            <Tab label="AI Prompts" />
-          </Tabs>
-          <Divider />
-
-          {/* Tab panels */}
-          <Box sx={{ p: 3 }} hidden={activeTab !== 0}>
-            {results.projectPlan && (
-              <Box sx={{ position: 'relative' }}>
-                <Button
-                  size="small"
-                  startIcon={<ContentCopyIcon />}
-                  onClick={() => handleCopy(results.projectPlan)}
-                  sx={{
-                    position: 'absolute',
-                    top: 0,
-                    right: 0,
-                    zIndex: 1,
-                  }}
-                >
-                  Copy
-                </Button>
-                <Box sx={{ p: 2, backgroundColor: '#f5f5f5', borderRadius: 1, mt: 4 }}>
+      {(results.projectPlan || results.aiPrompts || results.githubIssues) && (
+        <Paper elevation={3} sx={{ p: 4 }}>
+          <Typography variant="h5" gutterBottom>
+            Results
+          </Typography>
+          
+          <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+            <Tabs 
+              value={activeTab} 
+              onChange={handleTabChange} 
+              aria-label="result tabs"
+              variant="fullWidth"
+            >
+              <Tab label="Project Plan" id="tab-0" />
+              <Tab label="AI Prompts" id="tab-1" />
+              <Tab label="GitHub Issues" id="tab-2" />
+            </Tabs>
+          </Box>
+          
+          <div role="tabpanel" hidden={activeTab !== 0}>
+            {activeTab === 0 && (
+              <>
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+                  <Button 
+                    startIcon={<ContentCopyIcon />} 
+                    onClick={() => handleCopy(results.projectPlan)}
+                    size="small"
+                  >
+                    Copy
+                  </Button>
+                </Box>
+                <Box sx={{ backgroundColor: '#f5f5f5', p: 2, borderRadius: 1 }}>
                   <ReactMarkdown>{results.projectPlan}</ReactMarkdown>
                 </Box>
-              </Box>
+              </>
             )}
-          </Box>
-
-          <Box sx={{ p: 3 }} hidden={activeTab !== 1}>
-            {results.aiPrompts && (
-              <Box sx={{ position: 'relative' }}>
-                <Button
-                  size="small"
-                  startIcon={<ContentCopyIcon />}
-                  onClick={() => handleCopy(results.aiPrompts)}
-                  sx={{
-                    position: 'absolute',
-                    top: 0,
-                    right: 0,
-                    zIndex: 1,
-                  }}
-                >
-                  Copy
-                </Button>
-                <Box sx={{ p: 2, backgroundColor: '#f5f5f5', borderRadius: 1, mt: 4 }}>
+          </div>
+          
+          <div role="tabpanel" hidden={activeTab !== 1}>
+            {activeTab === 1 && (
+              <>
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+                  <Button 
+                    startIcon={<ContentCopyIcon />} 
+                    onClick={() => handleCopy(results.aiPrompts)}
+                    size="small"
+                  >
+                    Copy
+                  </Button>
+                </Box>
+                <Box sx={{ backgroundColor: '#f5f5f5', p: 2, borderRadius: 1 }}>
                   <ReactMarkdown>{results.aiPrompts}</ReactMarkdown>
                 </Box>
-              </Box>
+              </>
             )}
-          </Box>
+          </div>
+          
+          <div role="tabpanel" hidden={activeTab !== 2}>
+            {activeTab === 2 && renderGitHubIssuesTab()}
+          </div>
         </Paper>
       )}
     </Box>
