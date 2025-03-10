@@ -22,7 +22,15 @@ api_key = os.environ.get("OPENAI_API_KEY", "")
 github_token = os.environ.get("GITHUB_TOKEN", "")
 github_client_id = os.environ.get("GITHUB_CLIENT_ID", "")
 github_client_secret = os.environ.get("GITHUB_CLIENT_SECRET", "")
-github_oauth_redirect = os.environ.get("GITHUB_REDIRECT_URI", "http://localhost:8080/api/github/callback")
+
+# Get port from environment or use default
+port = int(os.environ.get('PORT', 8081))
+# Build the redirect URI using the correct port
+github_oauth_redirect = os.environ.get(
+    "GITHUB_REDIRECT_URI", 
+    f"http://localhost:{port}/api/github/callback"
+)
+
 os.environ["OPENAI_MODEL"] = "gpt-4o-mini"
 
 # Store temporary state values for OAuth
@@ -177,8 +185,14 @@ def create_github_issues(project_plan, ai_prompts, repo_name):
             # Verify access by attempting to get repository issues
             try:
                 # This will fail if the user doesn't have issues access
-                # Just get one issue to verify access (limit=1)
-                list(repo.get_issues(state='all', limit=1))
+                # Just get one issue to verify access (without using limit parameter)
+                issues_iterator = repo.get_issues(state='all')
+                # Just try to access the first item if available
+                try:
+                    next(iter(issues_iterator))
+                except StopIteration:
+                    # No issues, but that's okay - we just needed to verify API access
+                    pass
             except GithubException as access_e:
                 if access_e.status == 403:
                     return {
@@ -621,6 +635,15 @@ def validate_api_key():
 @app.route('/api/github/login')
 def github_login():
     """Initiate GitHub OAuth login process"""
+    # Check if GitHub OAuth is configured
+    if not github_client_id or not github_client_secret:
+        app.logger.error("GitHub OAuth is not configured. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables.")
+        return jsonify({
+            'success': False,
+            'message': 'GitHub OAuth is not configured on the server.',
+            'details': 'The server administrator needs to configure GitHub OAuth credentials.'
+        }), 400
+    
     # Generate a random state parameter to prevent CSRF attacks
     state = str(uuid.uuid4())
     oauth_states[state] = True
@@ -637,7 +660,11 @@ def github_login():
         f"&state={state}"
     )
     
+    app.logger.info(f"Initiating GitHub OAuth login with redirect URI: {github_oauth_redirect}")
+    app.logger.debug(f"Auth URL: {auth_url}")
+    
     return jsonify({
+        'success': True,
         'auth_url': auth_url,
         'state': state
     })
@@ -745,6 +772,14 @@ def github_logout():
     session.pop('github_user', None)
     return jsonify({'success': True})
 
+# If repo has any description with the term 'test' or 'example',
+# it might be a test repo, so place it lower in the sort order
+def repo_sort_key(repo):
+    is_owner = repo['is_owner']
+    is_test = 'test' in repo['name'].lower() or 'example' in repo['name'].lower()
+    name = repo['full_name'].lower()
+    return (not is_owner, is_test, name)
+
 @app.route('/api/github/repos', methods=['POST'])
 def get_github_repos():
     """Fetch repositories the user has access to with their GitHub token"""
@@ -818,7 +853,7 @@ def get_github_repos():
                         })
         
         # Sort repositories: first user's own repos, then alphabetically
-        repos = sorted(repos, key=lambda r: (not r['is_owner'], r['full_name'].lower()))
+        repos = sorted(repos, key=repo_sort_key)
         
         # Filter out repositories where issues are disabled
         repos_with_issues = [r for r in repos if r['has_issues']]
